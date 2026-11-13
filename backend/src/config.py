@@ -149,6 +149,11 @@ class Config:
         self.media_failover_enabled = self._get_bool_env("MEDIA_FAILOVER_ENABLED", False)
         if self.media_failover_enabled and not self.media_fallback_enabled:
             raise ValueError("MEDIA_FAILOVER_ENABLED requires MEDIA_FALLBACK configuration")
+        self.media_preferred_store = os.getenv("MEDIA_PREFERRED_STORE", "primary").strip().lower()
+        if self.media_preferred_store not in {"primary", "fallback"}:
+            raise ValueError("MEDIA_PREFERRED_STORE must be primary or fallback")
+        if self.media_preferred_store == "fallback" and not self.media_failover_enabled:
+            raise ValueError("MEDIA_PREFERRED_STORE=fallback requires MEDIA_FAILOVER_ENABLED")
         self.media_url_ttl_seconds = min(3600, max(60, int(os.getenv("MEDIA_URL_TTL_SECONDS", "900"))))
         self.media_cache_ttl_seconds = max(14400, int(os.getenv("MEDIA_CACHE_TTL_SECONDS", "86400")))
         self.media_orphan_grace_seconds = max(86400, int(os.getenv("MEDIA_ORPHAN_GRACE_SECONDS", "86400")))
@@ -183,6 +188,11 @@ class Config:
         self.video_job_defer_seconds = min(
             300, max(5, self._get_int_env("VIDEO_JOB_DEFER_SECONDS", 20))
         )
+        # How long a worker on another machine waits for an upload to be
+        # copied from the API's disk to object storage before failing the task.
+        self.upload_copy_wait_seconds = max(
+            60, self._get_int_env("UPLOAD_COPY_WAIT_SECONDS", 1800)
+        )
         # Pickup delay (enqueue until a worker starts the job) that raises a
         # PostHog exception. Rate-limited so a backed-up queue pages once.
         self.queue_delay_alert_seconds = max(
@@ -195,6 +205,8 @@ class Config:
         self.self_host = self._get_bool_env("SELF_HOST", True)
         self.monetization_enabled = not self.self_host
         self.backend_auth_secret = self._get_optional_env("BACKEND_AUTH_SECRET")
+        # Shared with the MCP server; enables its OAuth endpoints (/internal/mcp-oauth).
+        self.mcp_oauth_secret = self._get_optional_env("MCP_OAUTH_SECRET")
         self.allow_unsigned_backend_auth = self._get_bool_env(
             "ALLOW_UNSIGNED_BACKEND_AUTH", False
         )

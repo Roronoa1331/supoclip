@@ -1,5 +1,6 @@
 "use client";
 
+import { removeTaskDrafts } from "@/lib/editor/draft-cache";
 import { CaptionSizeControl } from "@/components/caption-size-control";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -506,6 +507,7 @@ export default function TaskPage() {
       });
 
       if (response.ok) {
+        removeTaskDrafts(String(params.id));
         router.push("/list");
       } else {
         toast.error(await buildSupportError(response, t("errors.deleteTask")));
@@ -528,6 +530,7 @@ export default function TaskPage() {
       });
 
       if (response.ok) {
+        removeTaskDrafts(String(params.id), clipId);
         setClips(clips.filter((clip) => clip.id !== clipId));
         setDeletingClipId(null);
       } else {
@@ -996,7 +999,9 @@ export default function TaskPage() {
 
         {isActive && task ? (
           <div className="space-y-8">
-            <ProcessingPanel status={task.status} progress={progress} message={progressMessage} startedAt={Date.parse(task.created_at)} workflow={workflow} />
+            <ProcessingPanel status={task.status} progress={progress} message={progressMessage} workflow={workflow}
+              phaseSince={Date.parse(task.updated_at)} sourceSeconds={task.source_duration_seconds}
+              upload={videoSourceKind(task.source_type) === "upload"} outputs={Math.max(clips.length, expectedTotal)} />
             <ProcessingSlots status={task.status} progress={progress} message={progressMessage}
               className={SINGLE_OUTPUT.has(workflow) ? "mx-auto max-w-[16rem] grid-cols-1 sm:grid-cols-1 lg:grid-cols-1 xl:grid-cols-1" : undefined}
               total={clipProgressFromMessage(progressMessage)?.total ?? Math.max(clips.length, expectedTotal)}>
