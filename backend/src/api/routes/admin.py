@@ -29,7 +29,7 @@ SETTING_METADATA = {
     },
     "LLM": {
         "label": "LLM model",
-        "description": "Provider and model, for example openai:gpt-5.2.",
+        "description": "Provider and model, for example openai:gpt-5.2 or deepseek:deepseek-flash.",
         "input_type": "text",
     },
     "OPENAI_API_KEY": {
@@ -41,6 +41,16 @@ SETTING_METADATA = {
         "label": "OpenRouter API key",
         "description": "Required for openrouter:* models, including Sonnet with Luna fallback.",
         "input_type": "password",
+    },
+    "DEEPSEEK_API_KEY": {
+        "label": "DeepSeek API key",
+        "description": "Required for deepseek:* models.",
+        "input_type": "password",
+    },
+    "DEEPSEEK_BASE_URL": {
+        "label": "DeepSeek base URL",
+        "description": "Optional override for DeepSeek-compatible gateways; defaults to https://api.deepseek.com.",
+        "input_type": "text",
     },
     "GOOGLE_API_KEY": {
         "label": "Google API key",

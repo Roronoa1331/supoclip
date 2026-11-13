@@ -63,6 +63,8 @@ In most cases, edit `.env` and then rebuild or restart the stack.
 | `GOOGLE_API_KEY` | If using Google | Required for `google-gla:*` models |
 | `ANTHROPIC_API_KEY` | If using Anthropic | Required for `anthropic:*` models |
 | `OPENROUTER_API_KEY` | If using OpenRouter | Required for `openrouter:*` models (see [OpenRouter analysis](openrouter-analysis.md)) |
+| `DEEPSEEK_API_KEY` | If using DeepSeek | Required for `deepseek:*` models |
+| `DEEPSEEK_BASE_URL` | Optional | Override for a DeepSeek-compatible gateway; defaults to `https://api.deepseek.com` |
 | `OLLAMA_BASE_URL` | If using Ollama remotely | Base URL for Ollama-compatible endpoints |
 | `OLLAMA_API_KEY` | Optional | Used for hosted Ollama providers such as Ollama Cloud |
 

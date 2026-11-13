@@ -62,6 +62,8 @@ def build_agent(output_type: type[T], system_prompt: str, *, structural: bool) -
         cfg.openai_api_key,
         cfg.openrouter_api_key,
         cfg.openrouter_fallback_model,
+        getattr(cfg, "deepseek_api_key", None),
+        getattr(cfg, "deepseek_base_url", None),
         cfg.google_api_key,
         cfg.anthropic_api_key,
         cfg.ollama_base_url,

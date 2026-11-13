@@ -11,20 +11,23 @@ import random
 import re
 
 import httpx
+from openai import AsyncOpenAI
 from pydantic_ai import Agent, NativeOutput
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.models import Model
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.ollama import OllamaModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.models.openrouter import OpenRouterModel
 from pydantic_ai.profiles.openai import OpenAIModelProfile
 from pydantic_ai.profiles.anthropic import AnthropicModelProfile
 from pydantic_ai.providers.anthropic import AnthropicProvider
+from pydantic_ai.providers.deepseek import DeepSeekProvider
 from pydantic_ai.providers.ollama import OllamaProvider
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 from pydantic import AliasChoices, BaseModel, Field, field_validator
 
-from .config import Config, get_config
+from .config import DEEPSEEK_BASE_URL, Config, get_config
 from .clip_duration import clip_duration
 from .runtime_settings import apply_settings_to_process_env
 from .workflows.prompts import instructions_block
@@ -439,7 +442,12 @@ def build_transcript_system_prompt(clip_length: str = "auto") -> str:
 _transcript_agent: Optional[Agent[None, TranscriptAnalysis]] = None
 _transcript_agent_signature: Optional[tuple[str | None, ...]] = None
 
-SUPPORTED_LLM_PROVIDERS = {"google", "google-gla", "openai", "openrouter", "anthropic", "ollama"}
+SUPPORTED_LLM_PROVIDERS = {
+    "google", "google-gla", "openai", "openrouter", "deepseek", "anthropic", "ollama",
+}
+# Hosted models use an 8192-token output cap; DeepSeek's thinking tokens count
+# toward it, so keep the same budget as the Anthropic and OpenRouter paths.
+DEEPSEEK_MAX_TOKENS = 8192
 
 
 def _split_llm_name(model_name: str) -> tuple[str, str | None]:
@@ -457,7 +465,7 @@ def _get_missing_llm_key_error(model_name: str, runtime_config: Config) -> Optio
     if provider not in SUPPORTED_LLM_PROVIDERS:
         return (
             f"Unsupported LLM provider '{provider}'. "
-            "Use google-gla:*, openai:*, openrouter:*, anthropic:*, or ollama:*."
+            "Use google-gla:*, openai:*, openrouter:*, deepseek:*, anthropic:*, or ollama:*."
         )
 
     if not provider_model_name:
@@ -482,6 +490,12 @@ def _get_missing_llm_key_error(model_name: str, runtime_config: Config) -> Optio
         return (
             "Selected LLM provider is OpenAI, but OPENAI_API_KEY is not set. "
             "Set OPENAI_API_KEY or choose another provider with a matching API key."
+        )
+
+    if provider == "deepseek" and not getattr(runtime_config, "deepseek_api_key", None):
+        return (
+            "Selected LLM provider is DeepSeek, but DEEPSEEK_API_KEY is not set. "
+            "Set DEEPSEEK_API_KEY or choose another provider with a matching API key."
         )
 
     if provider == "anthropic" and not runtime_config.anthropic_api_key:
@@ -521,6 +535,36 @@ def _build_transcript_model(
             provider=AnthropicProvider(api_key=runtime_config.anthropic_api_key),
             profile=profile,
             settings={"max_tokens": 8192},
+        )
+    if provider == "deepseek":
+        if not provider_model_name:
+            raise RuntimeError(
+                "Selected LLM provider is DeepSeek, but no model name was provided. "
+                "Use the format deepseek:<model>, for example deepseek:deepseek-flash."
+            )
+        base_url = (
+            getattr(runtime_config, "deepseek_base_url", None) or DEEPSEEK_BASE_URL
+        ).rstrip("/")
+        api_key = getattr(runtime_config, "deepseek_api_key", None)
+        if base_url == DEEPSEEK_BASE_URL:
+            provider_instance = DeepSeekProvider(api_key=api_key)
+        else:
+            # DeepSeekProvider hardcodes the official base URL; a custom
+            # gateway gets its own OpenAI-compatible client.
+            provider_instance = DeepSeekProvider(
+                openai_client=AsyncOpenAI(api_key=api_key, base_url=base_url)
+            )
+        # DeepSeek V4.1 Flash thinks by default and rejects tool_choice=required,
+        # so structured output runs through tool calling with tool_choice=auto.
+        # Native JSON schema output is not available on this endpoint.
+        profile = (
+            DeepSeekProvider.model_profile(provider_model_name) or OpenAIModelProfile()
+        ).update(OpenAIModelProfile(openai_supports_tool_choice_required=False))
+        return OpenAIChatModel(
+            provider_model_name,
+            provider=provider_instance,
+            profile=profile,
+            settings={"max_tokens": DEEPSEEK_MAX_TOKENS},
         )
     if provider == "openrouter":
         fallback = runtime_config.openrouter_fallback_model
@@ -571,6 +615,8 @@ def get_transcript_agent(clip_length: str = "auto") -> Agent[None, TranscriptAna
         runtime_config.openai_api_key,
         runtime_config.openrouter_api_key,
         runtime_config.openrouter_fallback_model,
+        getattr(runtime_config, "deepseek_api_key", None),
+        getattr(runtime_config, "deepseek_base_url", None),
         runtime_config.google_api_key,
         runtime_config.anthropic_api_key,
         runtime_config.ollama_base_url,
@@ -651,6 +697,8 @@ def get_rerank_agent() -> Agent[None, CandidateRanking]:
         runtime_config.openai_api_key,
         runtime_config.openrouter_api_key,
         runtime_config.openrouter_fallback_model,
+        getattr(runtime_config, "deepseek_api_key", None),
+        getattr(runtime_config, "deepseek_base_url", None),
         runtime_config.google_api_key,
         runtime_config.anthropic_api_key,
         runtime_config.ollama_base_url,
@@ -726,6 +774,8 @@ def get_broll_agent() -> Agent[None, BRollPlan]:
         runtime_config.openai_api_key,
         runtime_config.openrouter_api_key,
         runtime_config.openrouter_fallback_model,
+        getattr(runtime_config, "deepseek_api_key", None),
+        getattr(runtime_config, "deepseek_base_url", None),
         runtime_config.google_api_key,
         runtime_config.anthropic_api_key,
         runtime_config.ollama_base_url,
